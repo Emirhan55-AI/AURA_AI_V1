@@ -1,0 +1,258 @@
+"""
+Enhanced Fashion Classifier with improved model and features
+"""
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+from PIL import Image
+import torch
+import logging
+from typing import List, Dict, Tuple, Optional
+import requests
+from io import BytesIO
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class EnhancedClothingClassifier:
+    def __init__(self, model_name: str = "adityavithaldas/fashion_category_classification"):
+        """
+        Initialize the enhanced clothing classifier
+        
+        Args:
+            model_name: HuggingFace model identifier
+        """
+        self.model_name = model_name
+        self.processor = None
+        self.model = None
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using device: {self.device}")
+        
+        # Load model and processor
+        self.load_model()
+    
+    def load_model(self):
+        """Load the pre-trained model and processor"""
+        try:
+            logger.info(f"Loading model: {self.model_name}")
+            self.processor = AutoImageProcessor.from_pretrained(self.model_name)
+            self.model = AutoModelForImageClassification.from_pretrained(self.model_name)
+            self.model.to(self.device)
+            self.model.eval()
+            logger.info("Model loaded successfully")
+            
+            # Get model labels if available
+            if hasattr(self.model.config, 'id2label'):
+                self.labels = self.model.config.id2label
+                logger.info(f"Model supports {len(self.labels)} categories")
+                logger.info(f"Categories: {list(self.labels.values())}")
+            else:
+                logger.warning("Model labels not found in config")
+                self.labels = {}
+                
+        except Exception as e:
+            logger.error(f"Error loading model: {e}")
+            # Fallback to original model
+            self.model_name = "google/vit-base-patch16-224"
+            logger.info(f"Falling back to: {self.model_name}")
+            self._load_fallback_model()
+    
+    def _load_fallback_model(self):
+        """Load fallback model with manual category mapping"""
+        try:
+            self.processor = AutoImageProcessor.from_pretrained(self.model_name)
+            self.model = AutoModelForImageClassification.from_pretrained(self.model_name)
+            self.model.to(self.device)
+            self.model.eval()
+            
+            # Check if model has labels in config
+            if hasattr(self.model.config, 'id2label') and self.model.config.id2label:
+                self.labels = self.model.config.id2label
+                logger.info(f"Using model labels: {len(self.labels)} categories")
+            else:
+                # Fashion-MNIST labels (fallback)
+                self.labels = {
+                    0: "T-shirt/top",
+                    1: "Trouser", 
+                    2: "Pullover",
+                    3: "Dress",
+                    4: "Coat",
+                    5: "Sandal",
+                    6: "Shirt",
+                    7: "Sneaker",
+                    8: "Bag",
+                    9: "Ankle boot"
+                }
+                logger.info("Using Fashion-MNIST labels")
+            
+            logger.info("Fallback model loaded successfully")
+            
+        except Exception as e:
+            logger.error(f"Error loading fallback model: {e}")
+            raise
+    
+    def preprocess_image(self, image: Image.Image) -> torch.Tensor:
+        """
+        Preprocess image for model input
+        
+        Args:
+            image: PIL Image object
+            
+        Returns:
+            Preprocessed image tensor
+        """
+        try:
+            # Ensure image is RGB
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # Process image
+            inputs = self.processor(images=image, return_tensors="pt")
+            return inputs.pixel_values.to(self.device)
+            
+        except Exception as e:
+            logger.error(f"Error preprocessing image: {e}")
+            raise
+    
+    def classify_clothing_enhanced(
+        self, 
+        image: Image.Image, 
+        top_k: int = 3,
+        min_confidence: float = 0.1
+    ) -> List[Dict[str, any]]:
+        """
+        Enhanced clothing classification with multiple predictions
+        
+        Args:
+            image: PIL Image object
+            top_k: Number of top predictions to return
+            min_confidence: Minimum confidence threshold
+            
+        Returns:
+            List of predictions with labels, confidence scores and categories
+        """
+        try:
+            # Preprocess image
+            pixel_values = self.preprocess_image(image)
+            
+            # Make prediction
+            with torch.no_grad():
+                outputs = self.model(pixel_values)
+                logits = outputs.logits
+                probabilities = torch.softmax(logits, dim=-1)
+            
+            # Get top-k predictions
+            top_probs, top_indices = torch.topk(probabilities, min(top_k, len(self.labels)))
+            
+            predictions = []
+            for i in range(len(top_probs[0])):
+                prob = top_probs[0][i].item()
+                idx = top_indices[0][i].item()
+                
+                # Skip low confidence predictions
+                if prob < min_confidence:
+                    continue
+                
+                # Map index to label
+                if idx in self.labels:
+                    label = self.labels[idx]
+                else:
+                    # For models with many classes, try to map intelligently
+                    if len(self.labels) == 10:  # Fashion-MNIST case
+                        mapped_idx = idx % 10
+                        label = self.labels.get(mapped_idx, f"Fashion_Category_{mapped_idx}")
+                    else:
+                        label = f"Category_{idx}"
+                
+                prediction = {
+                    "label": label,
+                    "confidence": round(prob, 4),
+                    "category_id": idx,
+                    "percentage": round(prob * 100, 2)
+                }
+                predictions.append(prediction)
+            
+            # If no predictions above threshold, return top prediction
+            if not predictions:
+                prob = top_probs[0][0].item()
+                idx = top_indices[0][0].item()
+                
+                # Map index to label
+                if idx in self.labels:
+                    label = self.labels[idx]
+                else:
+                    if len(self.labels) == 10:  # Fashion-MNIST case
+                        mapped_idx = idx % 10
+                        label = self.labels.get(mapped_idx, f"Fashion_Category_{mapped_idx}")
+                    else:
+                        label = f"Category_{idx}"
+                
+                predictions = [{
+                    "label": label,
+                    "confidence": round(prob, 4),
+                    "category_id": idx,
+                    "percentage": round(prob * 100, 2)
+                }]
+            
+            logger.info(f"Classified image with {len(predictions)} predictions")
+            return predictions
+            
+        except Exception as e:
+            logger.error(f"Error classifying clothing: {e}")
+            raise
+    
+    def classify_from_url(self, image_url: str, **kwargs) -> List[Dict[str, any]]:
+        """
+        Classify clothing from image URL
+        
+        Args:
+            image_url: URL of the image
+            **kwargs: Additional arguments for classify_clothing_enhanced
+            
+        Returns:
+            List of predictions
+        """
+        try:
+            response = requests.get(image_url, timeout=10)
+            response.raise_for_status()
+            
+            image = Image.open(BytesIO(response.content))
+            return self.classify_clothing_enhanced(image, **kwargs)
+            
+        except Exception as e:
+            logger.error(f"Error classifying from URL: {e}")
+            raise
+    
+    def get_model_info(self) -> Dict[str, any]:
+        """Get information about the current model"""
+        return {
+            "model_name": self.model_name,
+            "device": str(self.device),
+            "num_categories": len(self.labels),
+            "categories": list(self.labels.values()) if self.labels else [],
+            "supports_confidence": True,
+            "supports_top_k": True
+        }
+
+# Test function
+def test_enhanced_classifier():
+    """Test the enhanced classifier"""
+    try:
+        classifier = EnhancedClothingClassifier()
+        
+        # Get model info
+        info = classifier.get_model_info()
+        print("🤖 Model Info:")
+        print(f"   Model: {info['model_name']}")
+        print(f"   Device: {info['device']}")
+        print(f"   Categories: {info['num_categories']}")
+        if info['categories']:
+            print(f"   Available categories: {info['categories'][:5]}...")
+        
+        return classifier
+        
+    except Exception as e:
+        print(f"❌ Test failed: {e}")
+        return None
+
+if __name__ == "__main__":
+    test_enhanced_classifier()

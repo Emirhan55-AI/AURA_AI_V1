@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Aura AI - Start API Server",
+			"type": "shell",
+			"command": "& \"C:/Users/emirhan55/Desktop/AURA AI V1/.venv/Scripts/python.exe\" -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000",
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
