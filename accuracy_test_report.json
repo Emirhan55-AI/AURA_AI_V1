@@ -1,0 +1,158 @@
+{
+  "accuracy": 60.0,
+  "passed_tests": 3,
+  "total_tests": 5,
+  "threshold": 0.5,
+  "detailed_results": {
+    "blue_tshirt": {
+      "test_name": "blue_tshirt",
+      "expected_label": "T-shirt/top",
+      "predictions": [
+        {
+          "label": "T-shirt/top",
+          "confidence": 0.8,
+          "category_id": 0,
+          "percentage": 80.0
+        },
+        {
+          "label": "Pullover",
+          "confidence": 0.15,
+          "category_id": 2,
+          "percentage": 15.0
+        },
+        {
+          "label": "Trouser",
+          "confidence": 0.02,
+          "category_id": 1,
+          "percentage": 2.0
+        }
+      ],
+      "found_expected": true,
+      "expected_rank": 1,
+      "expected_confidence": 0.8,
+      "test_passed": true,
+      "top_prediction": "T-shirt/top",
+      "top_confidence": 0.8
+    },
+    "red_dress": {
+      "test_name": "red_dress",
+      "expected_label": "Dress",
+      "predictions": [
+        {
+          "label": "T-shirt/top",
+          "confidence": 0.8,
+          "category_id": 0,
+          "percentage": 80.0
+        },
+        {
+          "label": "Pullover",
+          "confidence": 0.15,
+          "category_id": 2,
+          "percentage": 15.0
+        },
+        {
+          "label": "Trouser",
+          "confidence": 0.02,
+          "category_id": 1,
+          "percentage": 2.0
+        }
+      ],
+      "found_expected": false,
+      "expected_rank": null,
+      "expected_confidence": 0,
+      "test_passed": false,
+      "top_prediction": "T-shirt/top",
+      "top_confidence": 0.8
+    },
+    "navy_trouser": {
+      "test_name": "navy_trouser",
+      "expected_label": "Trouser",
+      "predictions": [
+        {
+          "label": "Trouser",
+          "confidence": 0.9,
+          "category_id": 1,
+          "percentage": 90.0
+        },
+        {
+          "label": "Ankle boot",
+          "confidence": 0.08,
+          "category_id": 9,
+          "percentage": 8.0
+        },
+        {
+          "label": "T-shirt/top",
+          "confidence": 0.02,
+          "category_id": 0,
+          "percentage": 2.0
+        }
+      ],
+      "found_expected": true,
+      "expected_rank": 1,
+      "expected_confidence": 0.9,
+      "test_passed": true,
+      "top_prediction": "Trouser",
+      "top_confidence": 0.9
+    },
+    "black_coat": {
+      "test_name": "black_coat",
+      "expected_label": "Coat",
+      "predictions": [
+        {
+          "label": "Coat",
+          "confidence": 0.85,
+          "category_id": 4,
+          "percentage": 85.0
+        },
+        {
+          "label": "Dress",
+          "confidence": 0.12,
+          "category_id": 3,
+          "percentage": 12.0
+        },
+        {
+          "label": "T-shirt/top",
+          "confidence": 0.02,
+          "category_id": 0,
+          "percentage": 2.0
+        }
+      ],
+      "found_expected": true,
+      "expected_rank": 1,
+      "expected_confidence": 0.85,
+      "test_passed": true,
+      "top_prediction": "Coat",
+      "top_confidence": 0.85
+    },
+    "brown_bag": {
+      "test_name": "brown_bag",
+      "expected_label": "Bag",
+      "predictions": [
+        {
+          "label": "T-shirt/top",
+          "confidence": 0.8,
+          "category_id": 0,
+          "percentage": 80.0
+        },
+        {
+          "label": "Pullover",
+          "confidence": 0.15,
+          "category_id": 2,
+          "percentage": 15.0
+        },
+        {
+          "label": "Trouser",
+          "confidence": 0.02,
+          "category_id": 1,
+          "percentage": 2.0
+        }
+      ],
+      "found_expected": false,
+      "expected_rank": null,
+      "expected_confidence": 0,
+      "test_passed": false,
+      "top_prediction": "T-shirt/top",
+      "top_confidence": 0.8
+    }
+  }
+}

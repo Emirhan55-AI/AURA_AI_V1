@@ -9,90 +9,62 @@ from typing import List, Dict, Tuple, Optional
 import requests
 from io import BytesIO
 
+# Import our custom fashion classifier
+from .fashion_classifier import FashionMNISTClassifier
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EnhancedClothingClassifier:
-    def __init__(self, model_name: str = "adityavithaldas/fashion_category_classification"):
+    def __init__(self, use_custom_fashion: bool = True):
         """
         Initialize the enhanced clothing classifier
         
         Args:
-            model_name: HuggingFace model identifier
+            use_custom_fashion: Whether to use custom fashion classifier
         """
-        self.model_name = model_name
-        self.processor = None
-        self.model = None
+        self.use_custom_fashion = use_custom_fashion
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {self.device}")
         
-        # Load model and processor
-        self.load_model()
+        if use_custom_fashion:
+            logger.info("Using custom Fashion-MNIST classifier")
+            self.fashion_classifier = FashionMNISTClassifier()
+            self.model_name = "Custom Fashion-MNIST Classifier"
+        else:
+            logger.info("Using HuggingFace model")
+            self.fashion_classifier = None
+            self.model_name = "google/vit-base-patch16-224"  # Fallback
+            self._load_huggingface_model()
     
-    def load_model(self):
-        """Load the pre-trained model and processor"""
+    def _load_huggingface_model(self):
+        """Load HuggingFace model (fallback)"""
         try:
-            logger.info(f"Loading model: {self.model_name}")
             self.processor = AutoImageProcessor.from_pretrained(self.model_name)
             self.model = AutoModelForImageClassification.from_pretrained(self.model_name)
             self.model.to(self.device)
             self.model.eval()
-            logger.info("Model loaded successfully")
             
             # Get model labels if available
-            if hasattr(self.model.config, 'id2label'):
-                self.labels = self.model.config.id2label
-                logger.info(f"Model supports {len(self.labels)} categories")
-                logger.info(f"Categories: {list(self.labels.values())}")
-            else:
-                logger.warning("Model labels not found in config")
-                self.labels = {}
-                
-        except Exception as e:
-            logger.error(f"Error loading model: {e}")
-            # Fallback to original model
-            self.model_name = "google/vit-base-patch16-224"
-            logger.info(f"Falling back to: {self.model_name}")
-            self._load_fallback_model()
-    
-    def _load_fallback_model(self):
-        """Load fallback model with manual category mapping"""
-        try:
-            self.processor = AutoImageProcessor.from_pretrained(self.model_name)
-            self.model = AutoModelForImageClassification.from_pretrained(self.model_name)
-            self.model.to(self.device)
-            self.model.eval()
-            
-            # Check if model has labels in config
             if hasattr(self.model.config, 'id2label') and self.model.config.id2label:
                 self.labels = self.model.config.id2label
-                logger.info(f"Using model labels: {len(self.labels)} categories")
+                logger.info(f"Model supports {len(self.labels)} categories")
             else:
                 # Fashion-MNIST labels (fallback)
                 self.labels = {
-                    0: "T-shirt/top",
-                    1: "Trouser", 
-                    2: "Pullover",
-                    3: "Dress",
-                    4: "Coat",
-                    5: "Sandal",
-                    6: "Shirt",
-                    7: "Sneaker",
-                    8: "Bag",
-                    9: "Ankle boot"
+                    0: "T-shirt/top", 1: "Trouser", 2: "Pullover", 3: "Dress", 4: "Coat",
+                    5: "Sandal", 6: "Shirt", 7: "Sneaker", 8: "Bag", 9: "Ankle boot"
                 }
                 logger.info("Using Fashion-MNIST labels")
-            
-            logger.info("Fallback model loaded successfully")
-            
+                
         except Exception as e:
-            logger.error(f"Error loading fallback model: {e}")
+            logger.error(f"Error loading HuggingFace model: {e}")
             raise
     
     def preprocess_image(self, image: Image.Image) -> torch.Tensor:
         """
-        Preprocess image for model input
+        Preprocess image for model input (only needed for HuggingFace models)
         
         Args:
             image: PIL Image object
@@ -101,6 +73,9 @@ class EnhancedClothingClassifier:
             Preprocessed image tensor
         """
         try:
+            if not hasattr(self, 'processor'):
+                raise ValueError("Processor not available")
+                
             # Ensure image is RGB
             if image.mode != 'RGB':
                 image = image.convert('RGB')
@@ -131,74 +106,85 @@ class EnhancedClothingClassifier:
             List of predictions with labels, confidence scores and categories
         """
         try:
-            # Preprocess image
-            pixel_values = self.preprocess_image(image)
-            
-            # Make prediction
-            with torch.no_grad():
-                outputs = self.model(pixel_values)
-                logits = outputs.logits
-                probabilities = torch.softmax(logits, dim=-1)
-            
-            # Get top-k predictions
-            top_probs, top_indices = torch.topk(probabilities, min(top_k, len(self.labels)))
-            
-            predictions = []
-            for i in range(len(top_probs[0])):
-                prob = top_probs[0][i].item()
-                idx = top_indices[0][i].item()
+            if self.use_custom_fashion and self.fashion_classifier:
+                # Use custom fashion classifier
+                return self.fashion_classifier.classify_clothing_enhanced(
+                    image, top_k=top_k, min_confidence=min_confidence
+                )
+            else:
+                # Use HuggingFace model (fallback)
+                return self._classify_with_huggingface(image, top_k, min_confidence)
                 
-                # Skip low confidence predictions
-                if prob < min_confidence:
-                    continue
-                
-                # Map index to label
-                if idx in self.labels:
-                    label = self.labels[idx]
-                else:
-                    # For models with many classes, try to map intelligently
-                    if len(self.labels) == 10:  # Fashion-MNIST case
-                        mapped_idx = idx % 10
-                        label = self.labels.get(mapped_idx, f"Fashion_Category_{mapped_idx}")
-                    else:
-                        label = f"Category_{idx}"
-                
-                prediction = {
-                    "label": label,
-                    "confidence": round(prob, 4),
-                    "category_id": idx,
-                    "percentage": round(prob * 100, 2)
-                }
-                predictions.append(prediction)
-            
-            # If no predictions above threshold, return top prediction
-            if not predictions:
-                prob = top_probs[0][0].item()
-                idx = top_indices[0][0].item()
-                
-                # Map index to label
-                if idx in self.labels:
-                    label = self.labels[idx]
-                else:
-                    if len(self.labels) == 10:  # Fashion-MNIST case
-                        mapped_idx = idx % 10
-                        label = self.labels.get(mapped_idx, f"Fashion_Category_{mapped_idx}")
-                    else:
-                        label = f"Category_{idx}"
-                
-                predictions = [{
-                    "label": label,
-                    "confidence": round(prob, 4),
-                    "category_id": idx,
-                    "percentage": round(prob * 100, 2)
-                }]
-            
-            logger.info(f"Classified image with {len(predictions)} predictions")
-            return predictions
-            
         except Exception as e:
             logger.error(f"Error classifying clothing: {e}")
             raise
+    
+    def _classify_with_huggingface(self, image: Image.Image, top_k: int, min_confidence: float):
+        """Classify using HuggingFace model"""
+        # Preprocess image
+        pixel_values = self.preprocess_image(image)
+        
+        # Make prediction
+        with torch.no_grad():
+            outputs = self.model(pixel_values)
+            logits = outputs.logits
+            probabilities = torch.softmax(logits, dim=-1)
+        
+        # Get top-k predictions
+        top_probs, top_indices = torch.topk(probabilities, min(top_k, len(self.labels)))
+        
+        predictions = []
+        for i in range(len(top_probs[0])):
+            prob = top_probs[0][i].item()
+            idx = top_indices[0][i].item()
+            
+            # Skip low confidence predictions
+            if prob < min_confidence:
+                continue
+            
+            # Map index to label
+            if idx in self.labels:
+                label = self.labels[idx]
+            else:
+                # For models with many classes, try to map intelligently
+                if len(self.labels) == 10:  # Fashion-MNIST case
+                    mapped_idx = idx % 10
+                    label = self.labels.get(mapped_idx, f"Fashion_Category_{mapped_idx}")
+                else:
+                    label = f"Category_{idx}"
+            
+            prediction = {
+                "label": label,
+                "confidence": round(prob, 4),
+                "category_id": idx,
+                "percentage": round(prob * 100, 2)
+            }
+            predictions.append(prediction)
+        
+        # If no predictions above threshold, return top prediction
+        if not predictions:
+            prob = top_probs[0][0].item()
+            idx = top_indices[0][0].item()
+            
+            # Map index to label
+            if idx in self.labels:
+                label = self.labels[idx]
+            else:
+                if len(self.labels) == 10:  # Fashion-MNIST case
+                    mapped_idx = idx % 10
+                    label = self.labels.get(mapped_idx, f"Fashion_Category_{mapped_idx}")
+                else:
+                    label = f"Category_{idx}"
+            
+            predictions = [{
+                "label": label,
+                "confidence": round(prob, 4),
+                "category_id": idx,
+                "percentage": round(prob * 100, 2)
+            }]
+        
+        logger.info(f"Classified image with {len(predictions)} predictions")
+        return predictions
     
     def classify_from_url(self, image_url: str, **kwargs) -> List[Dict[str, any]]:
         """
@@ -224,14 +210,17 @@ class EnhancedClothingClassifier:
     
     def get_model_info(self) -> Dict[str, any]:
         """Get information about the current model"""
-        return {
-            "model_name": self.model_name,
-            "device": str(self.device),
-            "num_categories": len(self.labels),
-            "categories": list(self.labels.values()) if self.labels else [],
-            "supports_confidence": True,
-            "supports_top_k": True
-        }
+        if self.use_custom_fashion and self.fashion_classifier:
+            return self.fashion_classifier.get_model_info()
+        else:
+            return {
+                "model_name": self.model_name,
+                "device": str(self.device),
+                "num_categories": len(self.labels) if hasattr(self, 'labels') else 0,
+                "categories": list(self.labels.values()) if hasattr(self, 'labels') else [],
+                "supports_confidence": True,
+                "supports_top_k": True
+            }
 
 # Test function
 def test_enhanced_classifier():
