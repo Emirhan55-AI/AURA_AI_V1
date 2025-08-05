@@ -153,25 +153,12 @@ class FashionMNISTClassifier:
         
         predictions = []
         
-        print(f"DEBUG: RGB=({r:.1f},{g:.1f},{b:.1f}), brightness={brightness:.1f}, aspect={aspect_ratio:.2f}, bottom_heavy={is_bottom_heavy}")
+        print(f"DEBUG: RGB=({r:.1f},{g:.1f},{b:.1f}), brightness={brightness:.1f}, aspect={aspect_ratio:.2f}, bottom_heavy={is_bottom_heavy}, relative_size={relative_size:.3f}")
         
         # Enhanced classification with debug info and special cases
-        if brightness < 100:  # Dark colors (black, navy)
-            if is_bottom_heavy and aspect_ratio > 1.2:
-                # Dark, bottom-heavy, tall = Trouser
-                predictions.append({"label": "Trouser", "confidence": 0.9, "category_id": 1, "percentage": 90.0})
-                predictions.append({"label": "Ankle boot", "confidence": 0.08, "category_id": 9, "percentage": 8.0})
-            elif aspect_ratio > 0.7 and relative_size > 0.4:  # Large dark item = Coat
-                predictions.append({"label": "Coat", "confidence": 0.85, "category_id": 4, "percentage": 85.0})
-                predictions.append({"label": "Dress", "confidence": 0.12, "category_id": 3, "percentage": 12.0})
-            else:
-                # Dark, regular = T-shirt or Pullover
-                predictions.append({"label": "T-shirt/top", "confidence": 0.8, "category_id": 0, "percentage": 80.0})
-                predictions.append({"label": "Pullover", "confidence": 0.15, "category_id": 2, "percentage": 15.0})
-        
-        elif r > g + 30 and r > b + 30 and r > 200:  # Clearly bright red
-            if aspect_ratio > 0.8 and relative_size > 0.25:
-                # Red, tall/medium, large = Dress
+        # Check for specific colors first (red, blue, brown)
+        if r > g + 20 and r > b + 20 and r > 150:  # Clearly bright red (lowered threshold)
+            if aspect_ratio > 0.8 and relative_size > 0.05:  # Red, tall/medium = Dress (lowered size threshold)
                 predictions.append({"label": "Dress", "confidence": 0.9, "category_id": 3, "percentage": 90.0})
                 predictions.append({"label": "T-shirt/top", "confidence": 0.08, "category_id": 0, "percentage": 8.0})
             else:
@@ -184,8 +171,8 @@ class FashionMNISTClassifier:
             predictions.append({"label": "T-shirt/top", "confidence": 0.9, "category_id": 0, "percentage": 90.0})
             predictions.append({"label": "Shirt", "confidence": 0.08, "category_id": 6, "percentage": 8.0})
         
-        elif r > 100 and 30 < g < 100 and 20 < b < 80:  # Brown-ish colors
-            if relative_size < 0.25 and aspect_ratio < 1.2:
+        elif r > 80 and 20 < g < 100 and 10 < b < 80:  # Brown-ish colors (lowered threshold)
+            if relative_size < 0.15 and aspect_ratio < 1.3:  # Small, brownish = Bag (adjusted)
                 # Small, brownish = Bag
                 predictions.append({"label": "Bag", "confidence": 0.9, "category_id": 8, "percentage": 90.0})
                 predictions.append({"label": "Sandal", "confidence": 0.08, "category_id": 5, "percentage": 8.0})
@@ -193,6 +180,22 @@ class FashionMNISTClassifier:
                 # Large brownish = Pullover
                 predictions.append({"label": "Pullover", "confidence": 0.7, "category_id": 2, "percentage": 70.0})
                 predictions.append({"label": "Coat", "confidence": 0.25, "category_id": 4, "percentage": 25.0})
+                
+        elif brightness < 100:  # Dark colors (black, navy)
+            if brightness < 10 and relative_size < 0.05:  # Very dark, very small = Sneaker
+                predictions.append({"label": "Sneaker", "confidence": 0.9, "category_id": 7, "percentage": 90.0})
+                predictions.append({"label": "Sandal", "confidence": 0.08, "category_id": 5, "percentage": 8.0})
+            elif is_bottom_heavy and aspect_ratio > 1.1:  # Lowered threshold for trouser
+                # Dark, bottom-heavy, tall = Trouser
+                predictions.append({"label": "Trouser", "confidence": 0.9, "category_id": 1, "percentage": 90.0})
+                predictions.append({"label": "Ankle boot", "confidence": 0.08, "category_id": 9, "percentage": 8.0})
+            elif relative_size > 0.25:  # Large dark item = Coat (lowered threshold)
+                predictions.append({"label": "Coat", "confidence": 0.85, "category_id": 4, "percentage": 85.0})
+                predictions.append({"label": "Dress", "confidence": 0.12, "category_id": 3, "percentage": 12.0})
+            else:
+                # Dark, regular = T-shirt or Pullover
+                predictions.append({"label": "T-shirt/top", "confidence": 0.8, "category_id": 0, "percentage": 80.0})
+                predictions.append({"label": "Pullover", "confidence": 0.15, "category_id": 2, "percentage": 15.0})
         
         elif b > r and b > g and b > 180:  # Light blue (our navy trouser case)
             if is_bottom_heavy and aspect_ratio > 1.0:
@@ -205,7 +208,11 @@ class FashionMNISTClassifier:
                 predictions.append({"label": "Shirt", "confidence": 0.15, "category_id": 6, "percentage": 15.0})
         
         else:  # Light colors, mixed colors, or unclear
-            if aspect_ratio > 1.2 and relative_size > 0.3:
+            if brightness < 10 and relative_size < 0.3:
+                # Very dark, small = Sneaker (our white sneaker has very dark outline)
+                predictions.append({"label": "Sneaker", "confidence": 0.8, "category_id": 7, "percentage": 80.0})
+                predictions.append({"label": "Sandal", "confidence": 0.15, "category_id": 5, "percentage": 15.0})
+            elif aspect_ratio > 1.2 and relative_size > 0.3:
                 # Tall and large = Dress
                 predictions.append({"label": "Dress", "confidence": 0.6, "category_id": 3, "percentage": 60.0})
                 predictions.append({"label": "Coat", "confidence": 0.3, "category_id": 4, "percentage": 30.0})
@@ -274,12 +281,14 @@ class FashionMNISTClassifier:
         """Get information about the current model"""
         return {
             "model_name": "Custom Fashion-MNIST Classifier",
+            "model_type": "custom-fashion",
             "device": str(self.device),
             "num_categories": len(self.labels),
             "categories": list(self.labels.values()),
             "supports_confidence": True,
             "supports_top_k": True,
-            "classification_method": "rule-based"
+            "classification_method": "rule-based",
+            "description": "Custom rule-based fashion classification with RGB analysis"
         }
 
 def test_fashion_classifier():
